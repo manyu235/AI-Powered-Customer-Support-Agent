@@ -30,24 +30,33 @@ Classify the email by:
 2. Topic: Account, Billing, Bug, Feature Request, Technical Issue
 
 Return valid JSON only:
-{
+{{
   "urgency": "Low/Medium/High",
   "topic": "Account/Billing/Bug/Feature Request/Technical Issue",
   "reasoning": "brief explanation"
-}"""),
+}}"""),
         ("human", "Classify this email:\n\nFrom: {sender}\n\n{email_content}")
     ])
     
     try:
-        response = llm.invoke(classification_prompt.format(
+        response = llm.invoke(classification_prompt.format_messages(
             sender=state["sender"],
             email_content=state["email_content"]
         ))
         
-        result = json.loads(response.content)
-        state["urgency"] = result.get("urgency", "Medium")
-        state["topic"] = result.get("topic", "Technical Issue")
-        state["reasoning"] = result.get("reasoning", "")
+        # Extract JSON from response
+        content = response.content
+        start_idx = content.find('{')
+        end_idx = content.rfind('}') + 1
+        
+        if start_idx != -1 and end_idx > start_idx:
+            json_str = content[start_idx:end_idx]
+            result = json.loads(json_str)
+            state["urgency"] = result.get("urgency", "Medium")
+            state["topic"] = result.get("topic", "Technical Issue")
+            state["reasoning"] = result.get("reasoning", "")
+        else:
+            raise ValueError("No JSON in classification response")
         
     except Exception as e:
         state["urgency"] = "Medium"
@@ -168,54 +177,74 @@ def decide_escalation(state: EmailState) -> EmailState:
     """Decide if email should be escalated to human agent"""
     
     escalation_prompt = ChatPromptTemplate.from_messages([
-        ("system", """You are an escalation decision system.
+        ("system", """You are an escalation decision system for customer support.
 
 Decide if this customer support case should be escalated to a human agent.
 
-Escalate if:
-- Urgency is High AND topic is Billing or Bug
-- The knowledge base doesn't provide sufficient information
-- The issue is complex or requires manual intervention
-- Customer is frustrated or angry (detected from tone)
-- API or technical issues affecting business operations
+ESCALATION REQUIRED if ANY of these apply:
+1. Urgency is "High" AND (topic is "Billing" OR topic is "Bug")
+2. Customer mentions they are very upset, frustrated, or angry
+3. The issue affects production or business operations
+4. The issue requires manual refund or account changes
+5. Response requires immediate action (same day)
+6. API/technical issues affecting multiple customers
 
-Return valid JSON only:
-{
-  "escalate": true/false,
-  "follow_up": "none/24h/48h/1week",
-  "reasoning": "brief explanation"
-}"""),
-        ("human", """Evaluate this case:
+OUTPUT MUST BE VALID JSON ONLY:
+{{
+  "escalate": true,
+  "follow_up": "none",
+  "reasoning": "Customer was charged twice - refund required"
+}}
+
+or
+
+{{
+  "escalate": false,
+  "follow_up": "none",
+  "reasoning": "Standard account question with simple answer"
+}}
+
+Important: Return ONLY the JSON object, no other text."""),
+        ("human", """Evaluate if this case needs escalation:
 
 Email: {email_content}
 Urgency: {urgency}
 Topic: {topic}
-Knowledge Base Match: {knowledge_base_result}
 
-Should this be escalated?""")
+Provide escalation decision as JSON.""")
     ])
     
     try:
-        response = llm.invoke(escalation_prompt.format(
+        response = llm.invoke(escalation_prompt.format_messages(
             email_content=state["email_content"],
             urgency=state["urgency"],
-            topic=state["topic"],
-            knowledge_base_result=state["knowledge_base_result"]
+            topic=state["topic"]
         ))
         
-        result = json.loads(response.content)
-        state["escalate"] = result.get("escalate", False)
-        state["follow_up"] = result.get("follow_up", "none")
+        # Extract JSON from response
+        content = response.content
+        start_idx = content.find('{')
+        end_idx = content.rfind('}') + 1
         
-        escalation_reasoning = result.get("reasoning", "")
-        if state["reasoning"]:
-            state["reasoning"] += f" | Escalation: {escalation_reasoning}"
+        if start_idx != -1 and end_idx > start_idx:
+            json_str = content[start_idx:end_idx]
+            result = json.loads(json_str)
+            state["escalate"] = result.get("escalate", False)
+            state["follow_up"] = result.get("follow_up", "none")
+            
+            escalation_reasoning = result.get("reasoning", "")
+            if state["reasoning"]:
+                state["reasoning"] += f" | Escalation: {escalation_reasoning}"
+            else:
+                state["reasoning"] = escalation_reasoning
         else:
-            state["reasoning"] = escalation_reasoning
+            raise ValueError("No JSON in response")
         
     except Exception as e:
+        # Fallback: escalate if urgency is High or if it's a critical issue
+        print(f"Escalation decision error: {e}")
         state["escalate"] = state["urgency"] == "High"
-        state["follow_up"] = "48h" if state["urgency"] == "High" else "none"
+        state["follow_up"] = "24h" if state["urgency"] == "High" else "none"
     
     print(f"Escalation decision: {state['escalate']}, Follow-up: {state['follow_up']}")
     return state

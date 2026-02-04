@@ -13,8 +13,25 @@ test_emails = [
     },
     {
         "sender": "angry.customer@email.com",
-        "subject": "Double Charged - IMMEDIATE ACTION REQUIRED",
-        "content": "I was charged TWICE for my subscription this month! This is unacceptable. I need a refund immediately or I'm canceling my account!"
+        "subject": "CRITICAL: Double Charged - IMMEDIATE REFUND REQUIRED",
+        "content": """I am EXTREMELY upset and frustrated!
+
+I was charged TWICE for my subscription this month. Two charges of $99 each hit my credit card today.
+
+This is completely unacceptable and I need IMMEDIATE action:
+1. Full refund of the duplicate charge ($99)
+2. Confirmation that this won't happen again
+3. Some compensation for this inconvenience
+
+If this is not resolved within 24 hours, I am canceling my account and posting negative reviews everywhere.
+
+Transaction IDs: TXN-55443 and TXN-55444
+Account: ACC-89012
+
+This needs to be escalated NOW to someone with authority to process refunds.
+
+Sincerely,
+An upset customer"""
     },
     {
         "sender": "feature.lover@email.com",
@@ -23,8 +40,27 @@ test_emails = [
     },
     {
         "sender": "tech.lead@enterprise.com",
-        "subject": "Critical API Integration Issue",
-        "content": "Our production API integration is failing intermittently with 504 timeout errors. This is affecting our business operations. We need urgent assistance to resolve this."
+        "subject": "CRITICAL: Production API Integration Failure",
+        "content": """URGENT - PRODUCTION OUTAGE
+
+Our production environment is experiencing critical failures with your API integration.
+
+Details:
+- 504 timeout errors occurring intermittently
+- Affecting 50,000+ active users
+- Business-critical transactions are failing
+- Revenue impact is severe
+
+Status: CRITICAL - Business operations halted
+Time Sensitivity: IMMEDIATE resolution required
+Impact: Production environment down
+
+We need escalation to your engineering team RIGHT NOW.
+
+Error logs and transaction IDs available.
+
+Contact: ops@enterprise.com
+Phone: +1-555-0123"""
     }
 ]
 
@@ -53,12 +89,22 @@ def run_all_tests():
     print("SUMMARY OF ALL TEST CASES")
     print("=" * 80)
     
+    escalated_count = 0
     for item in results:
+        escalated = item['result']['escalate']
+        action = 'ESCALATE ⬆️' if escalated else 'AUTO-REPLY ✓'
+        if escalated:
+            escalated_count += 1
+        
         print(f"\nTest {item['test_case']}: {item['subject']}")
         print(f"  Urgency: {item['result']['urgency']}")
         print(f"  Topic: {item['result']['topic']}")
-        print(f"  Action: {'ESCALATE' if item['result']['escalate'] else 'AUTO-REPLY'}")
+        print(f"  Action: {action}")
         print(f"  Follow-up: {item['result']['follow_up']}")
+    
+    print(f"\n{'=' * 80}")
+    print(f"ESCALATION SUMMARY: {escalated_count} out of {len(results)} cases escalated to human agent")
+    print(f"{'=' * 80}")
 
 if __name__ == "__main__":
     run_all_tests()
